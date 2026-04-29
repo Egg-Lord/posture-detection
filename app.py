@@ -1,41 +1,58 @@
-import streamlit as st
-import numpy as np
-import tensorflow as tf
+import av
 import cv2
-from PIL import Image
+import numpy as np
+import streamlit as st
+import tensorflow as tf
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration
 
-# Load model
+st.title("Live Posture Detection")
+
 loaded = tf.saved_model.load("saved_model_posture")
 infer = loaded.signatures["serving_default"]
 
 class_names = ["Leaning_Back", "Proper", "slouch"]
 
-st.title("Posture Detection")
+rtc_config = RTCConfiguration(
+    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+)
 
-uploaded_file = st.file_uploader("Upload an image", type=["jpg", "png"])
+class PostureProcessor(VideoProcessorBase):
+    def recv(self, frame):
+        img = frame.to_ndarray(format="bgr24")
 
-if uploaded_file:
-    img = Image.open(uploaded_file)
-    img = np.array(img)
+        h, w, _ = img.shape
 
-    h, w, _ = img.shape
+        crop = img[
+            int(h * 0.10):int(h * 0.95),
+            int(w * 0.15):int(w * 0.85)
+        ]
 
-    # Crop
-    crop = img[
-        int(h * 0.10):int(h * 0.95),
-        int(w * 0.15):int(w * 0.85)
-    ]
+        resized = cv2.resize(crop, (224, 224))
+        input_arr = np.expand_dims(resized, axis=0)
+        input_arr = tf.keras.applications.mobilenet_v2.preprocess_input(input_arr)
 
-    # Preprocess
-    resized = cv2.resize(crop, (224, 224))
-    img_array = np.expand_dims(resized, axis=0)
-    img_array = tf.keras.applications.mobilenet_v2.preprocess_input(img_array)
+        prediction = infer(tf.convert_to_tensor(input_arr))["output_0"].numpy()
 
-    # Predict
-    prediction = infer(tf.convert_to_tensor(img_array))["output_0"].numpy()
+        pred_class = class_names[np.argmax(prediction)]
+        confidence = np.max(prediction)
 
-    pred_class = class_names[np.argmax(prediction)]
-    confidence = np.max(prediction)
+        text = f"{pred_class} ({confidence * 100:.1f}%)"
 
-    st.image(crop, caption="Cropped Input", use_column_width=True)
-    st.write(f"Prediction: **{pred_class} ({confidence*100:.1f}%)**")
+        cv2.putText(
+            crop,
+            text,
+            (20, 40),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (0, 255, 0),
+            2
+        )
+
+        return av.VideoFrame.from_ndarray(crop, format="bgr24")
+
+webrtc_streamer(
+    key="posture-detection",
+    video_processor_factory=PostureProcessor,
+    rtc_configuration=rtc_config,
+    media_stream_constraints={"video": True, "audio": False}
+)
