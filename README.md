@@ -1,5 +1,11 @@
 # Posture Detection System
 
+(Own dataset is needed)
+130 images of
+- Slouching
+- Leaning_back
+- Proper
+
 ## Overview
 Real-time posture detection using MobileNetV2 and computer vision.  
 Classifies:
