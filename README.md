@@ -1,7 +1,7 @@
 # Posture Detection System
 
 (Own dataset is needed)
-130 images of
+130 images each of
 - Slouching
 - Leaning_back
 - Proper
