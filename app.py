@@ -1,58 +1,45 @@
-import av
-import cv2
-import numpy as np
 import streamlit as st
+import numpy as np
 import tensorflow as tf
-from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration
-
-st.title("Live Posture Detection")
+import cv2
+from PIL import Image
 
 loaded = tf.saved_model.load("saved_model_posture")
 infer = loaded.signatures["serving_default"]
 
 class_names = ["Leaning_Back", "Proper", "slouch"]
 
-rtc_config = RTCConfiguration(
-    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-)
+st. ("Posture Detection")
+st.write("Upload a posture image to classify it.")
 
-class PostureProcessor(VideoProcessorBase):
-    def recv(self, frame):
-        img = frame.to_ndarray(format="bgr24")
+uploaded_file = st.file_uploader("Upload image", type=["jpg", "jpeg", "png"])
 
-        h, w, _ = img.shape
+if uploaded_file is not None:
+    img = Image.open(uploaded_file).convert("RGB")
+    img = np.array(img)
 
-        crop = img[
-            int(h * 0.10):int(h * 0.95),
-            int(w * 0.15):int(w * 0.85)
-        ]
+    h, w, _ = img.shape
 
-        resized = cv2.resize(crop, (224, 224))
-        input_arr = np.expand_dims(resized, axis=0)
-        input_arr = tf.keras.applications.mobilenet_v2.preprocess_input(input_arr)
+    crop = img[
+        int(h * 0.10):int(h * 0.95),
+        int(w * 0.15):int(w * 0.85)
+    ]
 
-        prediction = infer(tf.convert_to_tensor(input_arr))["output_0"].numpy()
+    resized = cv2.resize(crop, (224, 224))
+    img_array = np.expand_dims(resized, axis=0)
+    img_array = tf.keras.applications.mobilenet_v2.preprocess_input(img_array)
 
-        pred_class = class_names[np.argmax(prediction)]
-        confidence = np.max(prediction)
+    prediction = infer(tf.convert_to_tensor(img_array))["output_0"].numpy()
 
-        text = f"{pred_class} ({confidence * 100:.1f}%)"
+    pred_class = class_names[np.argmax(prediction)]
+    confidence = np.max(prediction)
 
-        cv2.putText(
-            crop,
-            text,
-            (20, 40),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1,
-            (0, 255, 0),
-            2
-        )
+    st.image(crop, caption="Cropped Input", use_container_width=True)
 
-        return av.VideoFrame.from_ndarray(crop, format="bgr24")
+    st.subheader("Prediction Result")
+    st.write(f"**Class:** {pred_class}")
+    st.write(f"**Confidence:** {confidence * 100:.2f}%")
 
-webrtc_streamer(
-    key="posture-detection",
-    video_processor_factory=PostureProcessor,
-    rtc_configuration=rtc_config,
-    media_stream_constraints={"video": True, "audio": False}
-)
+    st.write("Class Probabilities:")
+    for cls, prob in zip(class_names, prediction[0]):
+        st.write(f"{cls}: {prob * 100:.2f}%")
