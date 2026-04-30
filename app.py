@@ -9,7 +9,7 @@ infer = loaded.signatures["serving_default"]
 
 class_names = ["Leaning_Back", "Proper", "slouch"]
 
-st. ("Posture Detection")
+st.title ("Posture Detection")
 st.write("Upload a posture image to classify it.")
 
 uploaded_file = st.file_uploader("Upload image", type=["jpg", "jpeg", "png"])
